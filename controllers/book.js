@@ -77,3 +77,36 @@ exports.deleteBook = (req, res, next) => {
     })
     .catch(error => res.status(404).json({ error }));
 };
+
+exports.addNewRating = async (req, res, next) => {
+    const ratingObject = req.body;
+    ratingObject.grade = ratingObject.rating;
+    delete ratingObject.rating;
+
+    try {
+        const updatedBookRatings = await Book.findOneAndUpdate(
+            { _id: req.params.id },
+            { $push: { ratings: ratingObject }, $inc: { totalRating: 1 } },
+            { new: true }
+        );
+
+        let averageRatingOfBook = 0;
+        for (let i = 0; i < updatedBookRatings.ratings.length; i++) {
+            averageRatingOfBook += updatedBookRatings.ratings[i].grade;
+        };
+        averageRatingOfBook /= updatedBookRatings.ratings.length;
+
+        const updatedBook = await Book.findOneAndUpdate(
+            { _id: req.params.id },
+            { averageRating: averageRatingOfBook },
+            { new: true }
+        );
+
+        return res.status(201).json({
+            book: updatedBook,
+            _id: req.params.id
+        });
+    } catch(error) {
+        return res.status(401).json({ error });
+    };
+};
