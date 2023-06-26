@@ -74,8 +74,28 @@ exports.modifyBook = async(req, res) => { // modifie le livre ciblé via :id
 
             const updateImage = async() => {
                 if (req.file) {
+                    // met à jour l'url de l'image avec celle de l'image optimisée
                     await nestedProperty.set(bookObject, 'imageUrl', `${req.protocol}://${req.get('host')}/images/processed_${req.file.filename.split('.')[0]}.webp`);
                 };
+            }
+
+            async function checkFileExist(path, timeout = 1000) {
+                let totalTime = 0; 
+                let checkTime = timeout / 10;
+
+                return await new Promise((resolve, reject) => {
+                    const timer = setInterval(function() { // bloque le code et vérifie toute les secondes si l'image à été crée
+
+                        totalTime += checkTime;
+                
+                        let fileExists = fs.existsSync(path);
+                
+                        if (fileExists || totalTime >= timeout) {
+                            clearInterval(timer);
+                            resolve(fileExists);
+                        }
+                    }, checkTime);
+                });
             }
 
             if (req.file) {
@@ -90,11 +110,11 @@ exports.modifyBook = async(req, res) => { // modifie le livre ciblé via :id
                         .webp({ quality: 80, force: true })
                         .toBuffer();
 
-                        sharp.cache(false);
+                        sharp.cache(false); // vide le cache de sharp afin d'éviter une duplication
 
-                        await fs.promises.writeFile(processedImagePath, processedImage)
+                        await fs.promises.writeFile(processedImagePath, processedImage) // enregistre l'image optimisée
 
-                        fs.unlink(req.file.path, () => {
+                        fs.unlink(req.file.path, () => { // supprime l'image originale
                             console.log('Image traitée avec sharp !');
                         });
                     });
@@ -103,8 +123,9 @@ exports.modifyBook = async(req, res) => { // modifie le livre ciblé via :id
                 };
             };
 
-            updateImage();
-            console.log(bookObject);
+            await checkFileExist(`${req.protocol}://${req.get('host')}/images/processed_${req.file.filename.split('.')[0]}.webp`); // freeze tant que l'image n'est pas trouvée
+
+            await updateImage(); // mets à jour l'URL de l'image avant que l'objet soit enregistré
 
             Book.updateOne({ _id: req.params.id }, { ...bookObject, _id: req.params.id })
             .then(() => res.status(200).json({ message: 'Livre modifié !' }))
