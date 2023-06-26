@@ -1,5 +1,9 @@
 const Book = require('../models/book');
 
+const sharp = require('sharp');
+
+const nestedProperty = require('nested-property');
+
 const fs = require('fs');
 
 exports.getAllBooks = (req, res) => { // récupère tout les livres
@@ -22,35 +26,86 @@ exports.getOneBook = (req, res) => { // récupère le livre ciblé via :id
     .catch(error => res.status(404).json({ error }));
 };
 
-exports.createBook = (req, res) => { // crée un nouveau livre
+exports.createBook = async(req, res) => { // crée un nouveau livre
     const bookObject = JSON.parse(req.body.book);
     delete bookObject._id;
     delete bookObject._userId;
-    const book = new Book({
-        ...bookObject,
-        userId: req.auth.userId,
-        imageUrl: `${req.protocol}://${req.get('host')}/images/${req.file.filename}`
-    });
 
-    book.save()
-    .then(() => res.status(201).json({ message: 'Livre enregistré !' }))
-    .catch(error => res.status(400).json({ error }));
+    try {
+        const filename = req.file.filename.split('.')[0];
+        const imagePath = `${req.file.destination}/${req.file.filename}`;
+
+        const processedImage = await sharp(imagePath)
+        .resize(500, 400)
+        .webp({ quality: 80, force: true })
+        .toBuffer();
+
+        sharp.cache(false);
+
+        const processedImagePath = `${req.file.destination}/processed_${filename}.webp`;
+        await fs.promises.writeFile(processedImagePath, processedImage);
+
+        fs.unlink(req.file.path, async() => {
+            let book = new Book({
+                ...bookObject,
+                userId: req.auth.userId,
+                imageUrl: `${req.protocol}://${req.get('host')}/images/${req.file.filename}`
+            });
+
+            book.imageUrl = `${req.protocol}://${req.get('host')}/${processedImagePath}`;
+
+            book.save()
+            .then(() => res.status(201).json({ message: 'Livre enregistré !'}))
+            .catch(error => res.status(400).json({ error }))
+        });
+    } catch(error) {
+        return res.status(400).json({ error });
+    };
 };
 
-exports.modifyBook = (req, res) => { // modifie le livre ciblé via :id
-    const bookObject = req.file ? {
-        ...JSON.parse(req.body.book),
-        imageUrl: `${req.protocol}://${req.get('host')}/images/${req.file.filename}`
-    } : { ...req.body };
-    delete bookObject._id;
-
+exports.modifyBook = async(req, res) => { // modifie le livre ciblé via :id
     Book.findOne({ _id: req.params.id })
-    .then(book => {
+    .then(async book => {
         if (book.userId == req.auth.userId) {
+            let bookObject = await req.file ? {
+                ...JSON.parse(req.body.book),
+                imageUrl: `${req.protocol}://${req.get('host')}/images/${req.file.filename}`,
+            } : { ...req.body };
+
+            const updateImage = async() => {
+                if (req.file) {
+                    await nestedProperty.set(bookObject, 'imageUrl', `${req.protocol}://${req.get('host')}/images/processed_${req.file.filename.split('.')[0]}.webp`);
+                };
+            }
+
             if (req.file) {
-                const filename = book.imageUrl.split('/images/')[1];
-                fs.unlinkSync(`images/${filename}`); // supprime l'image qui était utilisée avant
+                const originalFilename = book.imageUrl.split('/images/')[1];
+                const newFilename = req.file.filename.split('.')[0] + '.webp';
+                const processedImagePath = `images/processed_${newFilename}`;
+
+                try {
+                    fs.unlink(`images/${originalFilename}`, async() => { // supprime l'image qui était utilisée avant
+                        const processedImage = await sharp(req.file.path)
+                        .resize(500, 400)
+                        .webp({ quality: 80, force: true })
+                        .toBuffer();
+
+                        sharp.cache(false);
+
+                        await fs.promises.writeFile(processedImagePath, processedImage)
+
+                        fs.unlink(req.file.path, () => {
+                            console.log('Image traitée avec sharp !');
+                        });
+                    });
+                } catch(error) {
+                    console.error(error);
+                };
             };
+
+            updateImage();
+            console.log(bookObject);
+
             Book.updateOne({ _id: req.params.id }, { ...bookObject, _id: req.params.id })
             .then(() => res.status(200).json({ message: 'Livre modifié !' }))
             .catch(error => res.status(401).json({ error }));
@@ -58,7 +113,7 @@ exports.modifyBook = (req, res) => { // modifie le livre ciblé via :id
             return res.status(403).json({ message: 'Requête non-autorisée !' });
         };
     })
-    .catch(error => res.status(400).json({ error }));
+    .catch(error => res.status(400).json({ error: error.data }));
 };
 
 exports.deleteBook = (req, res) => { // supprime un livre
