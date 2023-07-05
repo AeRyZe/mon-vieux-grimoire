@@ -44,69 +44,43 @@ exports.createBook = (req, res) => { // crée un nouveau livre
     .catch(error => res.status(400).json({ error }))
 };
 
-exports.modifyBook = async(req, res) => { // modifie le livre ciblé via :id
+exports.modifyBook = (req, res) => { // modifie le livre ciblé via :id
     Book.findOne({ _id: req.params.id })
-    .then(async book => {
+    .then(book => {
         if (book.userId == req.auth.userId) {
-            let bookObject = await req.file ? {
+            let bookObject = req.file ? {
                 ...JSON.parse(req.body.book),
-                imageUrl: `${req.protocol}://${req.get('host')}/images/${req.file.filename}`,
+                imageUrl: `${req.protocol}://${req.get('host')}/${req.file.destination}/processed_${req.file.filename.split('.')[0]}.webp`,
             } : { ...req.body };
 
-            const updateImage = async() => {
-                if (req.file) {
-                    // met à jour l'url de l'image avec celle de l'image optimisée
-                    await nestedProperty.set(bookObject, 'imageUrl', `${req.protocol}://${req.get('host')}/images/processed_${req.file.filename.split('.')[0]}.webp`);
-                };
-            }
+            // async function waitForFile(path, timeout = 1000) {
+            //     let totalTime = 0; 
+            //     let checkTime = timeout / 10;
 
-            async function waitForFile(path, timeout = 1000) {
-                let totalTime = 0; 
-                let checkTime = timeout / 10;
+            //     return await new Promise((resolve, reject) => {
+            //         const timer = setInterval(function() { // bloque le code et vérifie toute les secondes si l'image à été crée
 
-                return await new Promise((resolve, reject) => {
-                    const timer = setInterval(function() { // bloque le code et vérifie toute les secondes si l'image à été crée
-
-                        totalTime += checkTime;
+            //             totalTime += checkTime;
                 
-                        let fileExists = fs.existsSync(path);
+            //             let fileExists = fs.existsSync(path);
                 
-                        if (fileExists || totalTime >= timeout) {
-                            clearInterval(timer);
-                            resolve(fileExists);
-                        }
-                    }, checkTime);
-                });
-            }
+            //             if (fileExists || totalTime >= timeout) {
+            //                 clearInterval(timer);
+            //                 resolve(fileExists);
+            //             }
+            //         }, checkTime);
+            //     });
+            // };
 
             if (req.file) {
                 const originalFilename = book.imageUrl.split('/images/')[1];
-                const newFilename = req.file.filename.split('.')[0] + '.webp';
-                const processedImagePath = `images/processed_${newFilename}`;
 
-                try {
-                    fs.unlink(`images/${originalFilename}`, async() => { // supprime l'image qui était utilisée avant
-                        const processedImage = await sharp(req.file.path)
-                        .resize(500, 400)
-                        .webp({ quality: 80, force: true })
-                        .toBuffer();
-
-                        sharp.cache(false); // vide le cache de sharp afin d'éviter une duplication
-
-                        await fs.promises.writeFile(processedImagePath, processedImage) // enregistre l'image optimisée
-
-                        fs.unlink(req.file.path, () => { // supprime l'image originale
-                            console.log('Image traitée avec sharp !');
-                        });
-                    });
-                } catch(error) {
-                    console.error(error);
-                };
+                fs.unlink(`${req.file.destination}/${originalFilename}`, () => { // supprime l'image qui était utilisée avant
+                    console.log('Ancienne image supprimée');
+                });
             };
 
-            await waitForFile(`${req.protocol}://${req.get('host')}/images/processed_${req.file.filename.split('.')[0]}.webp`); // freeze tant que l'image n'est pas trouvée
-
-            await updateImage(); // mets à jour l'URL de l'image avant que l'objet soit enregistré
+            // await waitForFile(`${req.protocol}://${req.get('host')}/${req.file.destination}/processed_${req.file.filename.split('.')[0]}.webp`);
 
             Book.updateOne({ _id: req.params.id }, { ...bookObject, _id: req.params.id })
             .then(() => res.status(200).json({ message: 'Livre modifié !' }))
