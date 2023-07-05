@@ -79,7 +79,7 @@ exports.modifyBook = async(req, res) => { // modifie le livre ciblé via :id
                 };
             }
 
-            async function checkFileExist(path, timeout = 1000) {
+            async function waitForFile(path, timeout = 1000) {
                 let totalTime = 0; 
                 let checkTime = timeout / 10;
 
@@ -123,7 +123,7 @@ exports.modifyBook = async(req, res) => { // modifie le livre ciblé via :id
                 };
             };
 
-            await checkFileExist(`${req.protocol}://${req.get('host')}/images/processed_${req.file.filename.split('.')[0]}.webp`); // freeze tant que l'image n'est pas trouvée
+            await waitForFile(`${req.protocol}://${req.get('host')}/images/processed_${req.file.filename.split('.')[0]}.webp`); // freeze tant que l'image n'est pas trouvée
 
             await updateImage(); // mets à jour l'URL de l'image avant que l'objet soit enregistré
 
@@ -134,7 +134,7 @@ exports.modifyBook = async(req, res) => { // modifie le livre ciblé via :id
             return res.status(403).json({ message: 'Requête non-autorisée !' });
         };
     })
-    .catch(error => res.status(400).json({ error: error.data }));
+    .catch(error => res.status(400).json({ error }));
 };
 
 exports.deleteBook = (req, res) => { // supprime un livre
