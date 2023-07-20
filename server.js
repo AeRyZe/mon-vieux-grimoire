@@ -1,5 +1,5 @@
 const http = require('http');
-const app = require('./api/index');
+const app = require('./index');
 
 const normalizePort = val => { // vérifie que la reqûete de port soit correcte
   const port = parseInt(val, 10);
