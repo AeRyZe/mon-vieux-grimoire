@@ -2,8 +2,8 @@ const express = require('express'); // framework pour créer notre app
 const mongoose = require('mongoose'); // librairie pour se connecter à MongoDB
 const path = require('path'); // Outil pour travailler avec les paths vers fichiers et dossiers
 
-const userRoutes = require('./routes/user');
-const bookRoutes = require('./routes/book');
+const userRoutes = require('../routes/user');
+const bookRoutes = require('../routes/book');
 
 const app = express();
 
